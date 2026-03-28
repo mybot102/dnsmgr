@@ -35,14 +35,20 @@
     </div>
     <div class="form-group">
         <label class="col-sm-3 control-label no-padding-right" is-required>解析记录</label>
-        <div class="col-sm-6"><div class="input-group">
-            <select name="recordid" v-model="set.recordid" id="recordid" class="form-control" required>
-                <option v-for="option in recordList" :value="option.RecordId">{{option.Value}} (线路:{{option.LineName}})</option>
-            </select>
-            <div class="input-group-btn">
-                <button type="button" @click="getRecordList" class="btn btn-info">点击获取</button>
+        <div class="col-sm-6">
+            <div class="input-group">
+                <select name="recordid" v-model="set.recordid" id="recordid" class="form-control" required>
+                    <option v-for="option in recordList" :value="option.RecordId">{{option.Value}} (线路:{{option.LineName}})</option>
+                </select>
+                <div class="input-group-btn">
+                    <button type="button" @click="getRecordList" class="btn btn-info">点击获取</button>
+                </div>
             </div>
-        </div></div>
+            <div v-if="action=='add' && recordList.length > 0" style="margin-top:8px">
+                <button type="button" @click="batchAdd" class="btn btn-warning btn-sm"><i class="fa fa-plus-circle"></i> 一键添加全部 ({{recordList.length}}条)</button>
+                <span class="tips" style="margin-left:6px">使用当前表单设置批量添加所有记录</span>
+            </div>
+        </div>
     </div>
     <div class="form-group">
         <label class="col-sm-3 control-label no-padding-right" is-required>切换设置</label>
@@ -258,6 +264,103 @@ new Vue({
                     layer.close(ii);
                     layer.msg('服务器错误');
                 }
+            });
+        },
+        batchAdd(){
+            var that = this;
+            if(this.set.did == '' || this.set.rr == ''){
+                layer.msg('请先填写主机记录和域名', {time: 1000}); return;
+            }
+            if(this.recordList.length == 0){
+                layer.msg('请先点击获取解析记录', {time: 1000}); return;
+            }
+            if(this.set.frequency == '' || this.set.cycle == ''){
+                layer.msg('请先填写检测间隔和确认次数', {time: 1000}); return;
+            }
+            layer.confirm('将使用当前表单设置，批量添加全部 '+this.recordList.length+' 条解析记录，确定继续？', {
+                btn: ['确定','取消']
+            }, function(){
+                var total = that.recordList.length;
+                var current = 0;
+                var success = 0;
+                var fail = 0;
+                var failList = [];
+
+                var progressHtml = '<div style="padding:15px;min-width:300px">' +
+                    '<div id="batchProgressText">准备添加...</div>' +
+                    '<div class="progress" style="margin-top:10px;margin-bottom:5px">' +
+                    '<div id="batchProgressBar" class="progress-bar progress-bar-striped active" role="progressbar" style="width:0%;min-width:2em">0%</div>' +
+                    '</div>' +
+                    '</div>';
+
+                var layerIdx = layer.open({
+                    type: 1,
+                    title: '批量添加进度',
+                    content: progressHtml,
+                    closeBtn: 0,
+                    area: ['380px', '160px'],
+                    move: false
+                });
+
+                function addNext(index){
+                    if(index >= total){
+                        layer.close(layerIdx);
+                        var msg = '批量添加完成！成功 '+success+' 条';
+                        if(fail > 0) msg += '，失败 '+fail+' 条';
+                        if(failList.length > 0) msg += '<br>失败详情：<br>' + failList.join('<br>');
+                        layer.alert(msg, {icon: success > 0 ? 1 : 2}, function(){
+                            if(success > 0) window.location.href = '/dmonitor/task';
+                        });
+                        return;
+                    }
+                    var record = that.recordList[index];
+                    var main_value = typeof record.Value === 'object' ? record.Value[0] : record.Value;
+                    var data = {
+                        did: that.set.did,
+                        rr: that.set.rr,
+                        recordid: record.RecordId,
+                        main_value: main_value,
+                        recordinfo: JSON.stringify({Line:record.Line, LineName:record.LineName, TTL:record.TTL}),
+                        type: that.set.type,
+                        backup_value: that.set.backup_value,
+                        checktype: that.set.checktype,
+                        checkurl: that.set.checkurl,
+                        tcpport: that.set.tcpport,
+                        frequency: that.set.frequency,
+                        cycle: that.set.cycle,
+                        timeout: that.set.timeout,
+                        proxy: that.set.proxy,
+                        cdn: that.set.cdn,
+                        remark: that.set.remark,
+                    };
+
+                    $('#batchProgressText').text('正在添加第 '+(index+1)+'/'+total+' 条：'+main_value);
+
+                    $.ajax({
+                        type: "POST",
+                        url: "/dmonitor/task/add",
+                        data: data,
+                        dataType: 'json',
+                        success: function(res) {
+                            current++;
+                            if(res.code == 0) success++;
+                            else { fail++; failList.push(main_value + ': ' + res.msg); }
+                            var percent = Math.round((current/total)*100);
+                            $('#batchProgressBar').css('width', percent+'%').text(percent+'%');
+                            addNext(index+1);
+                        },
+                        error: function() {
+                            current++;
+                            fail++;
+                            failList.push(main_value + ': 请求失败');
+                            var percent = Math.round((current/total)*100);
+                            $('#batchProgressBar').css('width', percent+'%').text(percent+'%');
+                            addNext(index+1);
+                        }
+                    });
+                }
+
+                addNext(0);
             });
         },
         submit(){
