@@ -26,7 +26,7 @@
             <div class="input-group">
                 <input type="text" name="rr" v-model="set.rr" placeholder="主机记录" class="form-control" required>
                 <span class="input-group-addon">.</span>
-                <select name="did" v-model="set.did" class="form-control" required>
+                <select name="did" v-model="set.did" id="domainSelect" class="form-control" required>
                     <option value="">--主域名--</option>
                     <option v-for="option in domainList" :value="option.id">{{option.name}}</option>
                 </select>
@@ -156,6 +156,8 @@
 {block name="script"}
 <script src="/static/js/vue-2.7.16.min.js"></script>
 <script src="/static/js/layer/layer.js"></script>
+<script src="/static/js/select2-4.0.13.min.js"></script>
+<script src="/static/js/select2-i18n-zh-CN-4.0.13.min.js"></script>
 <script src="/static/js/bootstrapValidator.min.js?v=2"></script>
 <script>
 var action = '{$action}';
@@ -216,6 +218,7 @@ new Vue({
         }
     },
     mounted() {
+        var that = this;
         if(this.action == 'edit'){
             Object.keys(info).forEach((key) => {
                 this.$set(this.set, key, info[key])
@@ -223,6 +226,19 @@ new Vue({
             var recordinfo = JSON.parse(this.set.recordinfo);
             this.recordList = [{RecordId:this.set.recordid, Value:this.set.main_value, Line:recordinfo.Line, LineName:recordinfo.LineName, TTL:recordinfo.TTL}];
         }
+        this.$nextTick(function(){
+            $('#domainSelect').select2({
+                placeholder: '--主域名--',
+                language: "zh-CN",
+                allowClear: true
+            }).on('change', function(){
+                var val = $(this).val();
+                that.set.did = val ? parseInt(val) : '';
+            });
+            if(that.set.did){
+                $('#domainSelect').val(that.set.did).trigger('change.select2');
+            }
+        });
         $("#taskform").bootstrapValidator({
             live: 'submitted',
         });
